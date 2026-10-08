@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111116" />
+    <title>Harbor — Launcher</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #111116; color: #f4f1ff; }
+      * { box-sizing: border-box; }
+      body { min-width: 320px; min-height: 100vh; display: grid; place-items: center; margin: 0; padding: 24px; background: radial-gradient(ellipse at 50% 39%, #211e2e 0, #111116 53%); }
+      main { width: min(420px, 100%); padding: 38px 34px 31px; border: 1px solid #373544; border-radius: 17px; background: rgb(27 26 36 / 84%); box-shadow: 0 24px 80px rgb(0 0 0 / 35%); text-align: center; animation: enter .45s cubic-bezier(.2,.8,.2,1) both; }
+      .mark { width: 51px; height: 51px; margin: 0 auto 15px; color: #a78bfa; animation: hover 3s ease-in-out infinite; }
+      .mark svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+      h1 { margin: 0; font-size: 25px; font-weight: 650; letter-spacing: -.055em; }
+      p { margin: 9px 0 24px; color: #aaa6bc; font-size: 12px; line-height: 1.6; }
+      button, a { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 17px; border: 1px solid #a78bfa; border-radius: 9px; background: #a78bfa; color: #191622; font: inherit; font-size: 11px; font-weight: 700; text-decoration: none; cursor: pointer; transition: transform .2s ease, background .2s ease, box-shadow .2s ease; }
+      button:hover, a:hover { transform: translateY(-2px); background: #9172f0; box-shadow: 0 9px 25px rgb(167 139 250 / 20%); }
+      button:active, a:active { transform: translateY(0) scale(.98); }
+      button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .note { margin-top: 18px; color: #777386; font-size: 9px; }
+      .error { display: none; margin: 18px 0 0; color: #e6a2a2; font-size: 11px; line-height: 1.5; }
+      .error.is-visible { display: block; animation: enter .25s ease both; }
+      .direct-link { min-height: auto; margin-top: 9px; padding: 0; border: 0; background: none; color: #c7b6ff; font-size: 10px; }
+      .direct-link:hover { transform: none; background: none; box-shadow: none; color: #e3d9ff; }
+      @keyframes enter { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M8 11.5 20 5l12 6.5v17L20 35 8 28.5v-17Z"/><path d="M14 23.5V16l6-3.2 6 3.2v7.5l-6 3.2-6-3.2Z"/><path d="M8.5 12 20 18.3 31.5 12M20 18.5v15"/></svg></div>
+      <h1>Harbor</h1>
+      <p>Your games, all in one place.<br />A quiet home for the next thing you want to play.</p>
+      <button id="launch-button" type="button"><span>Launch Harbor</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+      <div class="error" id="launch-error" role="status" aria-live="polite"></div>
+      <div class="note">Opens Harbor in a new browser tab.</div>
+    </main>
+    <script>
+      // Update this one URL if the GitHub Pages site is hosted elsewhere.
+      const HARBOR_URL = "https://axononymous.github.io/A-O-Studios/";
+      const launchButton = document.querySelector("#launch-button");
+      const errorPanel = document.querySelector("#launch-error");
+
+      function buildBlankHarborTab(tab) {
+        tab.document.open();
+        tab.document.write(`<!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Harbor</title>
+          <style>
+            *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:#111116;color:#f4f1ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+            .loading{position:absolute;z-index:2;inset:0;display:grid;align-content:center;justify-items:center;gap:15px;background:#111116;transition:opacity .45s ease,visibility .45s ease}
+            .loading.done{opacity:0;visibility:hidden;pointer-events:none}.mark{width:46px;height:46px;color:#a78bfa;animation:float 2.4s ease-in-out infinite}.mark svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+            .word{font-size:22px;font-weight:650;letter-spacing:-.05em}.track{width:116px;height:2px;overflow:hidden;border-radius:3px;background:#373544}.track span{display:block;width:45%;height:100%;background:#a78bfa;animation:load 1s ease-in-out infinite}.fallback{position:absolute;z-index:3;right:14px;bottom:14px;display:none;align-items:center;gap:10px;padding:9px 11px;border:1px solid #454157;border-radius:9px;background:#1b1a24;color:#aaa6bc;font-size:11px}.fallback.show{display:flex}.fallback button{border:0;background:none;color:#c7b6ff;font:inherit;cursor:pointer}.fallback button:hover{color:#fff}.app{position:absolute;inset:0;width:100%;height:100%;border:0;background:#111116}@keyframes load{from{transform:translateX(-120%)}to{transform:translateX(310%)}}@keyframes float{50%{transform:translateY(-3px)}}
+            @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+          </style></head><body>
+          <div class="loading" id="loading"><div class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M8 11.5 20 5l12 6.5v17L20 35 8 28.5v-17Z"/><path d="M14 23.5V16l6-3.2 6 3.2v7.5l-6 3.2-6-3.2Z"/><path d="M8.5 12 20 18.3 31.5 12M20 18.5v15"/></svg></div><div class="word">Harbor</div><div class="track"><span></span></div></div>
+          <iframe class="app" id="harbor-app" title="Harbor game library" allow="fullscreen; autoplay; gamepad" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+          <div class="fallback" id="fallback"><span>Still loading?</span><button id="open-direct" type="button">Open Harbor directly</button></div>
+          </body></html>`);
+        tab.document.close();
+
+        const frame = tab.document.querySelector("#harbor-app");
+        const loading = tab.document.querySelector("#loading");
+        const fallback = tab.document.querySelector("#fallback");
+        const directButton = tab.document.querySelector("#open-direct");
+        let fallbackTimer;
+        frame.addEventListener("load", () => {
+          loading.classList.add("done");
+        }, { once: true });
+        tab.addEventListener("message", (event) => {
+          if (event.origin !== new URL(HARBOR_URL).origin || event.data?.type !== "harbor-ready") return;
+          window.clearTimeout(fallbackTimer);
+          loading.classList.add("done");
+          fallback.remove();
+        });
+        directButton.addEventListener("click", () => tab.location.replace(HARBOR_URL));
+        fallbackTimer = window.setTimeout(() => fallback.classList.add("show"), 14000);
+        frame.src = HARBOR_URL;
+      }
+
+      launchButton.addEventListener("click", () => {
+        errorPanel.classList.remove("is-visible");
+        const tab = window.open("about:blank", "_blank");
+        if (!tab) {
+          errorPanel.textContent = "Your browser blocked the new tab. Allow pop-ups for this page, or open Harbor directly below.";
+          const direct = document.createElement("a");
+          direct.className = "direct-link";
+          direct.href = HARBOR_URL;
+          direct.target = "_blank";
+          direct.rel = "noopener noreferrer";
+          direct.textContent = "Open Harbor directly";
+          errorPanel.append(document.createElement("br"), direct);
+          errorPanel.classList.add("is-visible");
+          return;
+        }
+        try { tab.opener = null; } catch { /* The browser can make the new tab cross-origin immediately. */ }
+        try { buildBlankHarborTab(tab); }
+        catch {
+          try { tab.location.replace(HARBOR_URL); } catch { /* The user can retry from the launcher. */ }
+        }
+      });
+    </script>
+  </body>
+</html>
