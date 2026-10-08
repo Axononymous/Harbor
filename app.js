@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const REPOSITORY = "Axononymous/A-O-Studios";
+  const REPOSITORY = "Axononymous/Harbor";
   const BRANCH = "main";
   const API_GAMES_URL = `https://api.github.com/repos/${REPOSITORY}/contents/games?ref=${BRANCH}`;
   const API_TREE_URL = `https://api.github.com/repos/${REPOSITORY}/git/trees/${BRANCH}?recursive=1`;
