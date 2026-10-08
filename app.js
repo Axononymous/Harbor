@@ -69,6 +69,7 @@
     currentGame: null,
     loadToken: 0,
     loadTimeout: 0,
+    frameObjectURL: "",
     refreshPromise: null,
     isLoading: false,
     loadError: "",
@@ -170,6 +171,31 @@
 
   function cdnURL(path) {
     return `${CDN_GAMES_URL}${encodeRepoPath(path)}`;
+  }
+
+  function buildGameDocument(source, sourceURL) {
+    if (typeof source !== "string" || !source.trim() || !/<(?:!doctype\s+html|html|head|body|script|canvas|div)\b/i.test(source)) {
+      throw new Error("The selected file does not appear to contain a playable HTML page.");
+    }
+    const parsed = new DOMParser().parseFromString(source, "text/html");
+    if (!parsed.head || !parsed.body) throw new Error("The game file could not be parsed as HTML.");
+
+    // jsDelivr intentionally serves repository HTML as text/plain. Re-serve the
+    // fetched document with an HTML MIME type, and preserve relative game assets.
+    parsed.head.querySelectorAll("base").forEach((base) => base.remove());
+    const base = parsed.createElement("base");
+    base.href = new URL("./", sourceURL).href;
+    parsed.head.prepend(base);
+    return `<!doctype html>\n${parsed.documentElement.outerHTML}`;
+  }
+
+  function clearGameFrame() {
+    dom.frame.onload = null;
+    dom.frame.onerror = null;
+    dom.frame.src = "about:blank";
+    dom.frame.hidden = true;
+    if (state.frameObjectURL) URL.revokeObjectURL(state.frameObjectURL);
+    state.frameObjectURL = "";
   }
 
   function displayName(value) {
@@ -915,15 +941,21 @@
     }
   }
 
-  function launchGame(game) {
+  function harborGameURL(game) {
+    const target = new URL(window.location.href);
+    target.searchParams.set("game", game.id);
+    return target.href;
+  }
+
+  function launchGame(game, forceEmbed = false) {
     if (!game || !safeRepoPath(game.htmlPath)) {
       showToast("This repository entry does not contain a usable HTML game page.");
       return;
     }
     const url = cdnURL(game.htmlPath);
     addRecent(game);
-    if (state.settings.launchMode === "tab") {
-      openInNewTab(url, game.title);
+    if (state.settings.launchMode === "tab" && !forceEmbed) {
+      openInNewTab(harborGameURL(game), game.title);
       return;
     }
 
@@ -931,23 +963,31 @@
     state.loadToken += 1;
     const token = state.loadToken;
     window.clearTimeout(state.loadTimeout);
+    clearGameFrame();
     dom.playerTitle.textContent = game.title;
     dom.playerLoading.hidden = false;
-    dom.playerLoadingCopy.textContent = "Checking the game file on jsDelivr";
+    dom.playerLoadingCopy.textContent = "Fetching the game document from jsDelivr";
     dom.playerError.hidden = true;
-    dom.frame.hidden = true;
     showPlayerView();
+    state.loadTimeout = window.setTimeout(() => {
+      if (token === state.loadToken && !dom.playerLoading.hidden) showPlayerError(game, "The game download timed out. Check your connection or try again in a moment.");
+    }, 20000);
 
     const checkAndOpen = async () => {
       try {
-        const response = await fetchWithTimeout(url, { method: "HEAD", mode: "cors", cache: "no-store" }, REQUEST_TIMEOUT);
+        const response = await fetchWithTimeout(url, { mode: "cors", cache: "no-store" }, REQUEST_TIMEOUT);
         if (!response.ok) {
           const error = new Error(`The game server returned ${response.status}.`);
           error.status = response.status;
           throw error;
         }
         if (token !== state.loadToken) return;
-        dom.playerLoadingCopy.textContent = "Starting a secure game session";
+        const source = await response.text();
+        if (token !== state.loadToken) return;
+        dom.playerLoadingCopy.textContent = "Preparing the game and its relative assets";
+        const documentHTML = buildGameDocument(source, url);
+        const gameBlob = new Blob([documentHTML], { type: "text/html;charset=utf-8" });
+        state.frameObjectURL = URL.createObjectURL(gameBlob);
         dom.frame.hidden = false;
         dom.frame.title = `${game.title} game player`;
         dom.frame.onload = () => {
@@ -958,7 +998,8 @@
         dom.frame.onerror = () => {
           if (token === state.loadToken) showPlayerError(game, "Your browser could not load this game frame. Try opening it in a separate tab.");
         };
-        dom.frame.src = url;
+        window.clearTimeout(state.loadTimeout);
+        dom.frame.src = state.frameObjectURL;
         state.loadTimeout = window.setTimeout(() => {
           if (token === state.loadToken && !dom.playerLoading.hidden) showPlayerError(game, "The game took too long to respond. The CDN may be slow, or the page may not be a playable HTML file.");
         }, 20000);
@@ -970,9 +1011,10 @@
   }
 
   function showPlayerError(game, message) {
+    state.loadToken += 1;
     window.clearTimeout(state.loadTimeout);
     dom.playerLoading.hidden = true;
-    dom.frame.hidden = true;
+    clearGameFrame();
     dom.playerErrorTitle.textContent = `Couldn't open ${game.title}`;
     dom.playerErrorCopy.textContent = message;
     dom.playerError.hidden = false;
@@ -984,7 +1026,7 @@
 
   function openCurrentGameInTab() {
     if (!state.currentGame) return;
-    openInNewTab(cdnURL(state.currentGame.htmlPath), state.currentGame.title);
+    openInNewTab(harborGameURL(state.currentGame), state.currentGame.title);
   }
 
   function exitPlayer() {
@@ -996,10 +1038,7 @@
   function stopGameSession() {
     state.loadToken += 1;
     window.clearTimeout(state.loadTimeout);
-    dom.frame.onload = null;
-    dom.frame.onerror = null;
-    dom.frame.src = "about:blank";
-    dom.frame.hidden = true;
+    clearGameFrame();
     dom.playerLoading.hidden = true;
     dom.playerError.hidden = true;
   }
@@ -1118,6 +1157,17 @@
     if (button) button.title = active ? "Exit fullscreen" : "Fullscreen";
   }
 
+  function launchRequestedGame() {
+    const url = new URL(window.location.href);
+    const requestedId = url.searchParams.get("game");
+    if (!requestedId) return;
+    url.searchParams.delete("game");
+    try { history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`); } catch { /* Keep the query in unusual file URL contexts. */ }
+    const game = state.gameById.get(requestedId);
+    if (game) launchGame(game, true);
+    else showToast("That game is no longer in the discovered library. Refresh and try again.");
+  }
+
   async function initialize() {
     applySettings();
     syncSettingsControls();
@@ -1130,6 +1180,7 @@
       setGames(cached.games);
       setPage(state.page, false);
       setApplicationReady();
+      launchRequestedGame();
       if (Date.now() - cached.savedAt > CACHE_MAX_AGE) refreshLibrary();
       else {
         state.loadError = "";
@@ -1141,6 +1192,7 @@
     await refreshLibrary();
     setPage(state.page, false);
     setApplicationReady();
+    launchRequestedGame();
   }
 
   document.addEventListener("click", handleClick);
